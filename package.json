@@ -17,5 +17,8 @@
   "bugs": {
     "url": "https://github.com/Oleg0120/Lab3-node/issues"
   },
-  "homepage": "https://github.com/Oleg0120/Lab3-node#readme"
+  "homepage": "https://github.com/Oleg0120/Lab3-node#readme",
+  "dependencies": {
+    "commander": "^15.0.0"
+  }
 }
