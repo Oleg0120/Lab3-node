@@ -8,9 +8,12 @@ import fs from 'node:fs';
 program
   .name('survey')
   .description('CLI-програма для роботи з опитуванням про музику')
-  .version('1.0.0')
-  .option('-f, --file <path>', 'шлях до JSON-файлу', 'data.json');
+  .version('1.0.0');
 
+program.requiredOption(
+  '-f, --file <path>',
+  'шлях до JSON-файлу з даними опитування'
+);
 //допоміжні функції
 
 // Читає JSON-файл і повертає розпарсений об'єкт
@@ -68,7 +71,7 @@ program
 
     const limit = Number(options.limit);
     if (!Number.isInteger(limit) || limit <= 0) {
-      console.error('Помилка: значення --limit має бути додатним цілим числом');
+      console.error('значення --limit має бути додатним цілим числом');
       process.exit(1);
     }
 
@@ -145,4 +148,138 @@ program
   });
 
 
+//questions  перелік з відбором 
+program
+  .command('questions')
+  .description('Перелік питань з відбором за типом і обов\'язковістю')
+  .option('-t, --type <type>', 'фільтр за типом (single, multiple, scale, text)')
+  .option('-r, --required', 'показати лише обов\'язкові')
+  .action((options) => {
+    const data = loadData(program.opts().file);
+
+    const validTypes = ['single', 'multiple', 'scale', 'text'];
+    if (options.type && !validTypes.includes(options.type)) {
+      console.error(
+        `невідомий тип "${options.type}". Дозволені: ${validTypes.join(', ')}`
+      );
+      process.exit(1);
+    }
+
+    let questions = data.questions;
+
+    if (options.type) {
+      questions = questions.filter((q) => q.type === options.type);
+    }
+
+    if (options.required) {
+      questions = questions.filter((q) => q.isRequired === true);
+    }
+
+    if (questions.length === 0) {
+      console.log('Питань за заданими умовами не знайдено');
+      return;
+    }
+
+    const filterDescription = [];
+    if (options.type) filterDescription.push(`тип: ${options.type}`);
+    if (options.required) filterDescription.push('лише обов\'язкові');
+    const filterText = filterDescription.length > 0
+      ? ` (${filterDescription.join(', ')})`
+      : '';
+
+    console.log(`Знайдено питань: ${questions.length}${filterText}`);
+    for (const q of questions) {
+      const required = q.isRequired ? 'обов\'язкове' : 'необов\'язкове';
+      console.log(`  [${q.questionId}] ${q.text} (${q.type}, ${required})`);
+    }
+  });
+
+
+  //answers — відповіді всіх на питання 
+
+program
+  .command('answers')
+  .description('Відповіді всіх респондентів на обране питання')
+  .argument('<questionId>', 'ідентифікатор питання')
+  .action((questionId) => {
+    const data = loadData(program.opts().file);
+
+    const id = Number(questionId);
+    if (!Number.isInteger(id)) {
+      console.error('ідентифікатор питання має бути цілим числом');
+      process.exit(1);
+    }
+
+    const question = data.questions.find((q) => q.questionId === id);
+    if (!question) {
+      console.error(`питання з ідентифікатором ${id} не знайдено`);
+      process.exit(1);
+    }
+
+    console.log(`Питання ${question.questionId}: ${question.text}`);
+    console.log('Відповіді:');
+
+    let answeredCount = 0;
+    for (const respondent of data.responses) {
+      const answer = respondent.answers.find((a) => a.questionId === id);
+
+      if (answer) {
+        console.log(
+          `  Респондент ${respondent.respondentId}: ${formatValue(answer.value)}`
+        );
+        answeredCount++;
+      } else {
+        console.log(
+          `  Респондент ${respondent.respondentId}: (не відповів)`
+        );
+      }
+    }
+
+    if (answeredCount === 0) {
+      console.log('  (жоден респондент не відповів на це питання)');
+    }
+  });
+
+//  respondent — усі відповіді одного 
+
+program
+  .command('respondent')
+  .description('Усі відповіді одного респондента разом із текстом питань')
+  .argument('<id>', 'ідентифікатор респондента')
+  .action((id) => {
+    const data = loadData(program.opts().file);
+
+    const respondentId = Number(id);
+    if (!Number.isInteger(respondentId)) {
+      console.error('ідентифікатор респондента має бути цілим числом');
+      process.exit(1);
+    }
+
+    const respondent = data.responses.find(
+      (r) => r.respondentId === respondentId
+    );
+    if (!respondent) {
+      console.error(
+        ` респондента з ідентифікатором ${respondentId} не знайдено`
+      );
+      process.exit(1);
+    }
+
+    console.log(
+      `Респондент ${respondent.respondentId} (подано ${respondent.submittedDate}):`
+    );
+    console.log('Відповіді:');
+
+    for (const answer of respondent.answers) {
+      const question = data.questions.find(
+        (q) => q.questionId === answer.questionId
+      );
+      const questionText = question
+        ? question.text
+        : `[питання ${answer.questionId} не знайдено]`;
+
+      console.log(`  • ${questionText}`);
+      console.log(`      → ${formatValue(answer.value)}`);
+    }
+  });
 program.parse();
